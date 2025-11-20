@@ -1,41 +1,30 @@
 import 'package:flutter/material.dart';
-import 'login_page.dart';
+import 'package:go_router/go_router.dart';
 import '../database/contact_db.dart';
 
-// ====================== Modèle Contact ======================
 class Contact {
   int? id;
   String nom;
   String email;
   String telephone;
 
-  Contact({
-    this.id,
-    required this.nom,
-    required this.email,
-    required this.telephone,
-  });
+  Contact({this.id, required this.nom, required this.email, required this.telephone});
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'nom': nom,
-      'email': email,
-      'telephone': telephone,
-    };
-  }
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'nom': nom,
+        'email': email,
+        'telephone': telephone,
+      };
 
-  static Contact fromMap(Map<String, dynamic> map) {
-    return Contact(
-      id: map['id'] as int?,
-      nom: map['nom'] as String,
-      email: map['email'] as String,
-      telephone: map['telephone'] as String,
-    );
-  }
+  static Contact fromMap(Map<String, dynamic> map) => Contact(
+        id: map['id'],
+        nom: map['nom'],
+        email: map['email'],
+        telephone: map['telephone'],
+      );
 }
 
-// ====================== Page Home (fusionnée avec contacts) ======================
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -44,255 +33,164 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Contact> contacts = [];
-  List<Contact> contactsFiltres = [];
+  List<Contact> contacts = [];
+  List<Contact> filtered = [];
 
-  final TextEditingController nomController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController telController = TextEditingController();
-  final TextEditingController rechercheController = TextEditingController();
+  final nom = TextEditingController();
+  final email = TextEditingController();
+  final tel = TextEditingController();
+  final search = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    chargerContacts();
+    loadContacts();
   }
 
-  // Charger les contacts depuis SQLite
-  Future<void> chargerContacts() async {
+  Future<void> loadContacts() async {
     final data = await ContactDB.instance.getContacts();
     setState(() {
-      contacts
-        ..clear()
-        ..addAll(data.map((e) => Contact.fromMap(e)));
-      contactsFiltres = List.from(contacts);
+      contacts = data.map((e) => Contact.fromMap(e)).toList();
+      filtered = contacts;
     });
   }
 
-  // AJOUT
-  Future<void> ajouterContact() async {
-    if (nomController.text.isNotEmpty &&
-        emailController.text.isNotEmpty &&
-        telController.text.isNotEmpty) {
-      final contact = Contact(
-        nom: nomController.text,
-        email: emailController.text,
-        telephone: telController.text,
-      );
+  Future<void> addContact() async {
+    if (nom.text.isEmpty || email.text.isEmpty || tel.text.isEmpty) return;
 
-      await ContactDB.instance.insertContact(contact.toMap());
+    final c = Contact(nom: nom.text, email: email.text, telephone: tel.text);
+    await ContactDB.instance.insertContact(c.toMap());
 
-      nomController.clear();
-      emailController.clear();
-      telController.clear();
+    nom.clear();
+    email.clear();
+    tel.clear();
 
-      await chargerContacts();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Contact ajouté en base SQLite ✅")),
-      );
-    }
+    await loadContacts();
   }
 
-  // SUPPRESSION
-  Future<void> supprimerContact(Contact contact) async {
-    if (contact.id != null) {
-      await ContactDB.instance.deleteContact(contact.id!);
-      await chargerContacts();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Contact supprimé 🗑️")),
-      );
-    }
+  Future<void> deleteContact(Contact c) async {
+    await ContactDB.instance.deleteContact(c.id!);
+    await loadContacts();
   }
 
-  // MODIFICATION
-  void modifierContact(Contact contact) {
-    nomController.text = contact.nom;
-    emailController.text = contact.email;
-    telController.text = contact.telephone;
+  void editContact(Contact c) {
+    nom.text = c.nom;
+    email.text = c.email;
+    tel.text = c.telephone;
 
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Modifier le contact"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nomController,
-                decoration: const InputDecoration(labelText: "Nom"),
-              ),
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: "Email"),
-              ),
-              TextField(
-                controller: telController,
-                decoration: const InputDecoration(labelText: "Téléphone"),
-                keyboardType: TextInputType.phone,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                nomController.clear();
-                emailController.clear();
-                telController.clear();
-                Navigator.pop(context);
-              },
-              child: const Text("Annuler"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (contact.id != null) {
-                  final modif = Contact(
-                    id: contact.id,
-                    nom: nomController.text,
-                    email: emailController.text,
-                    telephone: telController.text,
-                  );
-                  await ContactDB.instance
-                      .updateContact(modif.id!, modif.toMap());
-                  await chargerContacts();
-                  nomController.clear();
-                  emailController.clear();
-                  telController.clear();
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Contact modifié ✏️")),
-                  );
-                }
-              },
-              child: const Text("Enregistrer"),
-            ),
+      builder: (_) => AlertDialog(
+        title: const Text("Modifier Contact"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nom),
+            TextField(controller: email),
+            TextField(controller: tel),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Annuler"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final updated = Contact(
+                id: c.id,
+                nom: nom.text,
+                email: email.text,
+                telephone: tel.text,
+              );
+
+              await ContactDB.instance.updateContact(updated.id!, updated.toMap());
+              Navigator.pop(context);
+              await loadContacts();
+            },
+            child: const Text("OK"),
+          ),
+        ],
+      ),
     );
   }
 
-  // RECHERCHE
-  void rechercherContact(String query) {
+  void filterSearch(String text) {
     setState(() {
-      if (query.isEmpty) {
-        contactsFiltres = List.from(contacts);
-      } else {
-        contactsFiltres = contacts
-            .where((c) =>
-                c.nom.toLowerCase().contains(query.toLowerCase()) ||
-                c.email.toLowerCase().contains(query.toLowerCase()) ||
-                c.telephone.contains(query))
-            .toList();
-      }
+      filtered = contacts
+          .where((c) =>
+              c.nom.toLowerCase().contains(text.toLowerCase()) ||
+              c.email.toLowerCase().contains(text.toLowerCase()) ||
+              c.telephone.contains(text))
+          .toList();
     });
-  }
-
-  // DÉCONNEXION
-  void deconnexion() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Gestion des contacts"),
+        title: const Text("Contacts SQLite"),
         actions: [
           IconButton(
-            onPressed: deconnexion,
-            icon: const Icon(Icons.logout),
-            tooltip: "Se déconnecter",
-          ),
+              onPressed: () => context.go('/login'),
+              icon: const Icon(Icons.logout))
         ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text(
-              "Ajouter un contact",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
+            const Text("Ajouter Contact", style: TextStyle(fontSize: 20)),
             const SizedBox(height: 10),
-            TextField(
-              controller: nomController,
-              decoration: const InputDecoration(
-                  labelText: "Nom", border: OutlineInputBorder()),
-            ),
+
+            TextField(controller: nom, decoration: const InputDecoration(labelText: "Nom")),
             const SizedBox(height: 10),
-            TextField(
-              controller: emailController,
-              decoration: const InputDecoration(
-                  labelText: "Email", border: OutlineInputBorder()),
-            ),
+            TextField(controller: email, decoration: const InputDecoration(labelText: "Email")),
             const SizedBox(height: 10),
-            TextField(
-              controller: telController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                  labelText: "Téléphone", border: OutlineInputBorder()),
-            ),
+            TextField(controller: tel, decoration: const InputDecoration(labelText: "Téléphone")),
             const SizedBox(height: 10),
+
             ElevatedButton(
-              onPressed: ajouterContact,
+              onPressed: addContact,
               child: const Text("Ajouter"),
             ),
-
             const Divider(),
 
             TextField(
-              controller: rechercheController,
+              controller: search,
+              onChanged: filterSearch,
               decoration: const InputDecoration(
-                  labelText: "Rechercher un contact",
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder()),
-              onChanged: rechercherContact,
+                labelText: "Rechercher",
+                prefixIcon: Icon(Icons.search),
+              ),
             ),
-            const SizedBox(height: 10),
 
             Expanded(
-              child: contactsFiltres.isEmpty
-                  ? const Center(
-                      child: Text(
-                        "Aucun contact trouvé 😕",
-                        style: TextStyle(fontSize: 16),
+              child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final c = filtered[i];
+                  return Card(
+                    child: ListTile(
+                      title: Text(c.nom),
+                      subtitle: Text("${c.email}\n${c.telephone}"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                              icon: const Icon(Icons.edit, color: Colors.orange),
+                              onPressed: () => editContact(c)),
+                          IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () => deleteContact(c)),
+                        ],
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: contactsFiltres.length,
-                      itemBuilder: (context, index) {
-                        final contact = contactsFiltres[index];
-                        return Card(
-                          child: ListTile(
-                            title: Text(contact.nom),
-                            subtitle: Text(
-                                "${contact.email}\n${contact.telephone}"),
-                            isThreeLine: true,
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit,
-                                      color: Colors.orange),
-                                  onPressed: () => modifierContact(contact),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete,
-                                      color: Colors.red),
-                                  onPressed: () => supprimerContact(contact),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
                     ),
-            ),
+                  );
+                },
+              ),
+            )
           ],
         ),
       ),

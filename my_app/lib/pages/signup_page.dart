@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../database/contact_db.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -18,23 +19,23 @@ class _SignUpPageState extends State<SignUpPage> {
   void register() async {
     if (_formKey.currentState!.validate()) {
       final user = {
-        'nom': nom.text,
-        'prenom': prenom.text,
-        'email': email.text,
-        'password': pass.text,
+        'nom': nom.text.trim(),
+        'prenom': prenom.text.trim(),
+        'email': email.text.trim(),
+        'password': pass.text.trim(),
       };
 
       try {
         await ContactDB.instance.insertUser(user);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Compte créé avec succès ✅")),
+          const SnackBar(content: Text("Compte créé avec succès 🎉")),
         );
 
-        Navigator.pop(context);
+        context.go('/login'); // retour Login
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Email déjà utilisé ❌")),
+          const SnackBar(content: Text("Email existe déjà ❌")),
         );
       }
     }
@@ -53,9 +54,7 @@ class _SignUpPageState extends State<SignUpPage> {
               TextFormField(
                 controller: nom,
                 decoration: const InputDecoration(
-                  labelText: "Nom",
-                  border: OutlineInputBorder(),
-                ),
+                    labelText: "Nom", border: OutlineInputBorder()),
                 validator: (v) => v!.isEmpty ? "Entrez votre nom" : null,
               ),
               const SizedBox(height: 15),
@@ -63,9 +62,7 @@ class _SignUpPageState extends State<SignUpPage> {
               TextFormField(
                 controller: prenom,
                 decoration: const InputDecoration(
-                  labelText: "Prénom",
-                  border: OutlineInputBorder(),
-                ),
+                    labelText: "Prénom", border: OutlineInputBorder()),
                 validator: (v) => v!.isEmpty ? "Entrez votre prénom" : null,
               ),
               const SizedBox(height: 15),
@@ -73,9 +70,7 @@ class _SignUpPageState extends State<SignUpPage> {
               TextFormField(
                 controller: email,
                 decoration: const InputDecoration(
-                  labelText: "Email",
-                  border: OutlineInputBorder(),
-                ),
+                    labelText: "Email", border: OutlineInputBorder()),
                 validator: (v) =>
                     v!.isEmpty ? "Entrez votre email" : null,
               ),
@@ -85,9 +80,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 controller: pass,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: "Mot de passe",
-                  border: OutlineInputBorder(),
-                ),
+                    labelText: "Mot de passe", border: OutlineInputBorder()),
                 validator: (v) =>
                     v!.length < 4 ? "Minimum 4 caractères" : null,
               ),
