@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../database/contact_db.dart';
-import 'home_page.dart';
-import 'signup_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,15 +17,12 @@ class _LoginPageState extends State<LoginPage> {
   void login() async {
     if (_formKey.currentState!.validate()) {
       final user = await ContactDB.instance.login(
-        emailController.text,
-        passController.text,
+        emailController.text.trim(),
+        passController.text.trim(),
       );
 
       if (user != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+        context.go('/home');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Email ou mot de passe incorrect ❌")),
@@ -72,15 +68,11 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 20),
 
-              ElevatedButton(onPressed: login, child: const Text("Se connecter")),
+              ElevatedButton(
+                  onPressed: login, child: const Text("Se connecter")),
 
               TextButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SignUpPage()),
-                  );
-                },
+                onPressed: () => context.go('/signup'),
                 child: const Text("Créer un compte"),
               )
             ],
