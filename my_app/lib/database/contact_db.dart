@@ -1,4 +1,4 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 
 class ContactDB {
@@ -13,18 +13,28 @@ class ContactDB {
     return _database!;
   }
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+  Future<Database> _initDB(String fileName) async {
+    // 🔥 OBLIGATOIRE SUR WINDOWS
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
 
-    return await openDatabase(
+    final dbPath = await databaseFactory.getDatabasesPath();
+    final path = join(dbPath, fileName);
+
+    print("SQLite PATH = $path"); // ❤️ montre le chemin réel
+
+    return await databaseFactory.openDatabase(
       path,
-      version: 2,
-      onCreate: _createDB,
+      options: OpenDatabaseOptions(
+        version: 2,
+        onCreate: (db, version) async {
+          await _createDB(db);
+        },
+      ),
     );
   }
 
-  Future _createDB(Database db, int version) async {
+  Future _createDB(Database db) async {
     await db.execute('''
       CREATE TABLE users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,14 +55,15 @@ class ContactDB {
     ''');
   }
 
-  // ---------- USERS ----------
+  // ---------------- USERS ----------------
+
   Future<int> insertUser(Map<String, dynamic> data) async {
-    final db = await instance.database;
+    final db = await database;
     return db.insert("users", data);
   }
 
   Future<Map<String, dynamic>?> login(String email, String password) async {
-    final db = await instance.database;
+    final db = await database;
     final res = await db.query(
       "users",
       where: "email = ? AND password = ?",
@@ -61,24 +72,25 @@ class ContactDB {
     return res.isNotEmpty ? res.first : null;
   }
 
-  // ---------- CONTACTS ----------
+  // ---------------- CONTACTS ----------------
+
   Future<int> insertContact(Map<String, dynamic> data) async {
-    final db = await instance.database;
+    final db = await database;
     return db.insert("contacts", data);
   }
 
   Future<List<Map<String, dynamic>>> getContacts() async {
-    final db = await instance.database;
+    final db = await database;
     return db.query("contacts");
   }
 
   Future<int> updateContact(int id, Map<String, dynamic> data) async {
-    final db = await instance.database;
+    final db = await database;
     return db.update("contacts", data, where: "id = ?", whereArgs: [id]);
   }
 
   Future<int> deleteContact(int id) async {
-    final db = await instance.database;
+    final db = await database;
     return db.delete("contacts", where: "id = ?", whereArgs: [id]);
   }
 }
