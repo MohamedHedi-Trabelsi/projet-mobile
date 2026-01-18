@@ -1,29 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../database/contact_db.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class Contact {
-  int? id;
-  String nom;
-  String email;
-  String telephone;
-
-  Contact({this.id, required this.nom, required this.email, required this.telephone});
-
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'nom': nom,
-        'email': email,
-        'telephone': telephone,
-      };
-
-  static Contact fromMap(Map<String, dynamic> map) => Contact(
-        id: map['id'],
-        nom: map['nom'],
-        email: map['email'],
-        telephone: map['telephone'],
-      );
-}
+import '../services/api_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -33,167 +12,167 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<Contact> contacts = [];
-  List<Contact> filtered = [];
-
-  final nom = TextEditingController();
-  final email = TextEditingController();
-  final tel = TextEditingController();
-  final search = TextEditingController();
+  bool _loading = true;
+  int? _userId;
+  List<dynamic> _contacts = [];
 
   @override
   void initState() {
     super.initState();
-    loadContacts();
+    _init();
   }
 
-  Future<void> loadContacts() async {
-    final data = await ContactDB.instance.getContacts();
-    setState(() {
-      contacts = data.map((e) => Contact.fromMap(e)).toList();
-      filtered = contacts;
-    });
+  Future<void> _init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _userId = prefs.getInt('userId');
+    if (_userId == null) {
+      if (!mounted) return;
+      context.go('/login');
+      return;
+    }
+    await _reload();
   }
 
-  Future<void> addContact() async {
-    if (nom.text.isEmpty || email.text.isEmpty || tel.text.isEmpty) return;
-
-    final c = Contact(nom: nom.text, email: email.text, telephone: tel.text);
-    await ContactDB.instance.insertContact(c.toMap());
-
-    nom.clear();
-    email.clear();
-    tel.clear();
-
-    await loadContacts();
+  Future<void> _reload() async {
+    setState(() => _loading = true);
+    try {
+      final contacts = await ApiService.getContacts(_userId!);
+      setState(() {
+        _contacts = contacts;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+      _showError(e.toString());
+    }
   }
 
-  Future<void> deleteContact(Contact c) async {
-    await ContactDB.instance.deleteContact(c.id!);
-    await loadContacts();
-  }
+  Future<void> _addContactDialog() async {
+    final nomCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final telCtrl = TextEditingController();
 
-  void editContact(Contact c) {
-    nom.text = c.nom;
-    email.text = c.email;
-    tel.text = c.telephone;
-
-    showDialog(
+    final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Modifier Contact"),
+        title: const Text("Ajouter un contact"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nom),
-            TextField(controller: email),
-            TextField(controller: tel),
+            TextField(controller: nomCtrl, decoration: const InputDecoration(labelText: "Nom")),
+            TextField(controller: emailCtrl, decoration: const InputDecoration(labelText: "Email")),
+            TextField(controller: telCtrl, decoration: const InputDecoration(labelText: "Téléphone")),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Annuler"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final updated = Contact(
-                id: c.id,
-                nom: nom.text,
-                email: email.text,
-                telephone: tel.text,
-              );
-
-              await ContactDB.instance.updateContact(updated.id!, updated.toMap());
-              Navigator.pop(context);
-              await loadContacts();
-            },
-            child: const Text("OK"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Annuler")),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("Ajouter")),
         ],
+      ),
+    );
+
+    if (ok == true) {
+      try {
+        await ApiService.addContact(
+          userId: _userId!,
+          nom: nomCtrl.text.trim(),
+          email: emailCtrl.text.trim(),
+          telephone: telCtrl.text.trim(),
+        );
+        await _reload();
+      } catch (e) {
+        _showError(e.toString());
+      }
+    }
+  }
+
+  Future<void> _delete(int contactId) async {
+    try {
+      await ApiService.deleteContact(contactId);
+      await _reload();
+    } catch (e) {
+      _showError(e.toString());
+    }
+  }
+
+  void _showError(String msg) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Erreur"),
+        content: Text(msg.replaceFirst('Exception: ', '')),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK"))],
       ),
     );
   }
 
-  void filterSearch(String text) {
-    setState(() {
-      filtered = contacts
-          .where((c) =>
-              c.nom.toLowerCase().contains(text.toLowerCase()) ||
-              c.email.toLowerCase().contains(text.toLowerCase()) ||
-              c.telephone.contains(text))
-          .toList();
-    });
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('userId');
+    if (!mounted) return;
+    context.go('/login');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Contacts SQLite"),
+        title: const Text("Mes Contacts"),
         actions: [
-          IconButton(
-              onPressed: () => context.go('/login'),
-              icon: const Icon(Icons.logout))
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _reload),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const Text("Ajouter Contact", style: TextStyle(fontSize: 20)),
-            const SizedBox(height: 10),
-
-            TextField(controller: nom, decoration: const InputDecoration(labelText: "Nom")),
-            const SizedBox(height: 10),
-            TextField(controller: email, decoration: const InputDecoration(labelText: "Email")),
-            const SizedBox(height: 10),
-            TextField(controller: tel, decoration: const InputDecoration(labelText: "Téléphone")),
-            const SizedBox(height: 10),
-
-            ElevatedButton(
-              onPressed: addContact,
-              child: const Text("Ajouter"),
-            ),
-            const Divider(),
-
-            TextField(
-              controller: search,
-              onChanged: filterSearch,
-              decoration: const InputDecoration(
-                labelText: "Rechercher",
-                prefixIcon: Icon(Icons.search),
-              ),
-            ),
-
-            Expanded(
-              child: ListView.builder(
-                itemCount: filtered.length,
-                itemBuilder: (_, i) {
-                  final c = filtered[i];
-                  return Card(
-                    child: ListTile(
-                      title: Text(c.nom),
-                      subtitle: Text("${c.email}\n${c.telephone}"),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.orange),
-                              onPressed: () => editContact(c)),
-                          IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => deleteContact(c)),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            )
-          ],
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addContactDialog,
+        child: const Icon(Icons.add),
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _contacts.isEmpty
+              ? const Center(child: Text("Aucun contact trouvé"))
+              : ListView.builder(
+                  itemCount: _contacts.length,
+                  itemBuilder: (_, i) {
+                    final c = _contacts[i] as Map<String, dynamic>;
+                    final id = c['id'] as int?;
+                    final nom = (c['nom'] ?? '').toString();
+                    final email = (c['email'] ?? '').toString();
+                    final tel = (c['telephone'] ?? '').toString();
+
+                    return Dismissible(
+                      key: ValueKey(id ?? i),
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 16),
+                        color: Colors.red,
+                        child: const Icon(Icons.delete, color: Colors.white),
+                      ),
+                      confirmDismiss: (_) async {
+                        return await showDialog<bool>(
+                              context: context,
+                              builder: (_) => AlertDialog(
+                                title: const Text("Supprimer ?"),
+                                content: Text("Supprimer $nom ?"),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Annuler")),
+                                  ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("Supprimer")),
+                                ],
+                              ),
+                            ) ??
+                            false;
+                      },
+                      onDismissed: (_) {
+                        if (id != null) _delete(id);
+                      },
+                      child: ListTile(
+                        title: Text(nom),
+                        subtitle: Text("$email • $tel"),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 }

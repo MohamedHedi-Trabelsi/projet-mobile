@@ -1,48 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
 import 'pages/home_page.dart';
 
-void main() {
-  // Required for Windows SQLite (sqflite_common_ffi)
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(const MyApp());
+  final prefs = await SharedPreferences.getInstance();
+  final userId = prefs.getInt('userId');
+
+  runApp(MyApp(
+    initialLocation: userId == null ? '/login' : '/home',
+  ));
 }
 
-// ------------------- ROUTES CONFIG -------------------
-
-final GoRouter appRouter = GoRouter(
-  initialLocation: '/login',
-  routes: [
-    GoRoute(
-      path: '/login',
-      builder: (context, state) => const LoginPage()
-    ),
-    GoRoute(
-      path: '/signup',
-      builder: (context, state) => const SignUpPage(),
-    ),
-    GoRoute(
-      path: '/home',
-      builder: (context, state) => const HomePage(),
-    ),
-  ],
-);
-
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String initialLocation;
+  const MyApp({super.key, required this.initialLocation});
 
   @override
   Widget build(BuildContext context) {
+    final router = GoRouter(
+      initialLocation: initialLocation,
+      routes: [
+        GoRoute(
+          path: '/login',
+          builder: (context, state) => const LoginPage(),
+        ),
+        GoRoute(
+          path: '/signup',
+          builder: (context, state) => const SignUpPage(),
+        ),
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => const HomePage(),
+        ),
+      ],
+    );
+
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      routerConfig: appRouter,
-      title: 'App Flutter',
+      title: 'Contact App',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorSchemeSeed: Colors.blue,
+      ),
+      routerConfig: router,
     );
   }
 }
